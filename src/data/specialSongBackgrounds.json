@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Perfect",
+    "artist": "Ed Sheeran",
+    "image": "/assets/special-backgrounds/her-1.jpg",
+    "message": "This song feels like you"
+  },
+  {
+    "title": "Until I Found You",
+    "artist": "Stephen Sanchez",
+    "image": "/assets/special-backgrounds/her-2.jpg",
+    "message": "My favorite memory with you"
+  },
+  {
+    "title": "Falling",
+    "artist": "Harry Styles",
+    "image": "/assets/special-backgrounds/her-3.jpg",
+    "message": "Always thinking of you"
+  }
+]
