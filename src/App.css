@@ -3,7 +3,7 @@
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  border-radius: calc(5 / 306 * 100vw); /* match frame's pixel-art rounded corners */
+  border-radius: calc(5 / 306 * 100vw);
   clip-path: inset(0 0 0 calc(3 / 306 * 100vw));
   --color-title: #78364F;
   --color-primary: #5a3a4a;
@@ -21,12 +21,7 @@
 
 .layer {
   position: absolute;
-  /* All values based on vw so everything scales from one reference.
-     Canvas is 526x526, visible frame is 306x497.
-     Image size: 526/306 * 100vw = 171.9vw
-     Left offset: 110/306 * 100vw = 35.95vw
-     Top offset: 23/306 * 100vw = 7.52vw */
-  top: calc(-23 / 306 * 100vw); /* crop at bow top */
+  top: calc(-23 / 306 * 100vw);
   left: -35.95vw;
   width: 171.9vw;
   height: 171.9vw;
@@ -56,10 +51,10 @@
 /* Invisible drag region for moving the frameless window */
 .drag-region {
   position: absolute;
-  top: calc(8 / 306 * 100vw); /* start below the bow, at the frame border */
+  top: calc(8 / 306 * 100vw);
   left: 0;
   width: 100%;
-  height: calc(50 / 306 * 100vw); /* top area of frame for dragging */
+  height: calc(50 / 306 * 100vw);
   z-index: 100;
   -webkit-app-region: drag;
 
@@ -77,8 +72,6 @@
 }
 
 /* Window control click targets — positioned over the button icons */
-/* Positions relative to 306-wide visible frame: (canvasX - 110) / 306 */
-/* Y relative to 497-tall visible frame: (canvasY - 23) / 497 */
 .btn {
   position: absolute;
   width: calc(20 / 306 * 100vw);
@@ -192,7 +185,6 @@
 }
 
 .settings-dropdown-menu {
-  /* Position is set inline via portal — top/left/width come from JS */
   background: var(--color-primary);
   border: calc(1 / 306 * 100vw) solid var(--color-panel-text);
   border-radius: calc(2 / 306 * 100vw);
@@ -544,7 +536,7 @@
 }
 
 .resize-handle.top-left {
-  top: calc(7 / 306 * 100vw); /* at frame border, not bow */
+  top: calc(7 / 306 * 100vw);
   left: 0;
   cursor: nwse-resize;
   border-top-left-radius: calc(5 / 306 * 100vw);
@@ -569,6 +561,66 @@
   right: 0;
   cursor: nwse-resize;
   border-bottom-right-radius: calc(5 / 306 * 100vw);
+}
+
+/* ── Special Song Background ──────────────────────────── */
+
+.special-song-background {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  filter: blur(10px);
+  transform: scale(1.08);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease,
+    filter 0.7s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.special-song-background.visible {
+  opacity: 0.28;
+  transform: scale(1.03);
+  filter: blur(6px);
+}
+
+.special-song-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle, rgba(255,255,255,0.12), transparent 55%),
+    rgba(0,0,0,0.35);
+  z-index: 1;
+}
+
+.special-song-message {
+  position: absolute;
+  left: 50%;
+  bottom: calc(95 / 306 * 100vw);
+  transform: translateX(-50%);
+  z-index: 160;
+  font-family: 'Rainyhearts', sans-serif;
+  font-size: calc(11 / 306 * 100vw);
+  color: var(--color-panel-text);
+  text-align: center;
+  max-width: calc(210 / 306 * 100vw);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+  animation: specialMessageFade 0.6s ease;
+}
+
+@keyframes specialMessageFade {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* ── Spotify panel ───────────────────────────────────────── */
