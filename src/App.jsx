@@ -4,6 +4,7 @@ import './App.css';
 import useAudioPlayer from './useAudioPlayer';
 import useSpotifyPlayer from './useSpotifyPlayer';
 import useTheme from './useTheme';
+import { getSpecialSongBackground, isValidImageUrl } from './utils/specialSongBackgroundMatcher';
 import { login as spotifyLogin, handleCallback, isLoggedIn as isSpotifyLoggedIn, logout as spotifyLogout } from './spotify/auth.js';
 import { fetchPlaylistTracks as fetchSpotifyTracks, fetchMyPlaylists as fetchSpotifyPlaylists } from './spotify/api.js';
 import { login as appleLogin, logout as appleLogout, isLoggedIn as isAppleLoggedIn, initMusicKit } from './apple/auth.js';
@@ -85,7 +86,6 @@ function SettingsDropdown({ value, options, onChange }) {
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('keydown', onKey);
     window.addEventListener('resize', updateRect);
-    // Close on scroll anywhere — positions become stale fast
     window.addEventListener('scroll', () => setOpen(false), true);
     return () => {
       document.removeEventListener('mousedown', onMouseDown);
@@ -132,8 +132,6 @@ function SettingsDropdown({ value, options, onChange }) {
             </button>
           ))}
         </div>,
-        // Portal to .player so CSS custom properties (--color-primary, etc.)
-        // and the theme class still cascade. document.body would orphan them.
         document.querySelector('.player') ?? document.body,
       )}
     </div>
@@ -177,7 +175,6 @@ function MarqueeText({ className, text }) {
 
   return (
     <div className={`${className} marquee-container`} ref={outerRef}>
-      {/* Hidden span to measure true text width */}
       <span ref={textRef} className="marquee-measure">{text}</span>
       <span className={shouldScroll ? 'marquee-scroll' : ''}>
         {text}
@@ -188,8 +185,7 @@ function MarqueeText({ className, text }) {
 }
 
 export default function App() {
-  // ── Source state ─────────────────────────────────────────
-  const [source, setSource] = useState('local'); // 'local' | 'streaming'
+  const [source, setSource] = useState('local');
   const [spotifyConnected, setSpotifyConnected] = useState(isSpotifyLoggedIn());
   const [appleConnected, setAppleConnected] = useState(isAppleLoggedIn());
   const [youtubeConnected, setYoutubeConnected] = useState(isYouTubeLoggedIn());
@@ -210,13 +206,22 @@ export default function App() {
       // ignore
     }
     return 'local';
-  }); // 'spotify' | 'apple' | 'youtube' | 'local'
-  const [playMode, setPlayMode] = useState('normal'); // 'normal' | 'shuffle' | 'repeat'
+  });
+  const [playMode, setPlayMode] = useState('normal');
   const [volumeHovered, setVolumeHovered] = useState(false);
   const [volumeDragging, setVolumeDragging] = useState(false);
   const volumeBarRef = useRef(null);
   const [showDebug] = useState(false);
   const [localTracks, setLocalTracks] = useState([]);
+
+  const [specialBgEnabled, setSpecialBgEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem('cupid-special-song-bg-enabled');
+      return stored !== 'false';
+    } catch {
+      return true;
+    }
+  });
 
   const loadLocalPlaylist = useCallback(async () => {
     if (!window.cupid?.getLocalPlaylist) return;
@@ -254,7 +259,6 @@ export default function App() {
     setPlayMode((m) => m === 'normal' ? 'shuffle' : m === 'shuffle' ? 'repeat' : 'normal');
   }, []);
 
-  // ── Fetch Spotify playlists ────────────────────────────
   const loadSpotifyPlaylists = useCallback((silent = false) => {
     setLoadingPlaylists(true);
     if (!silent) setSettingsError(null);
@@ -264,7 +268,6 @@ export default function App() {
       .finally(() => setLoadingPlaylists(false));
   }, []);
 
-  // ── Fetch Apple Music playlists ────────────────────────
   const loadApplePlaylists = useCallback((silent = false) => {
     setLoadingPlaylists(true);
     if (!silent) setSettingsError(null);
@@ -274,7 +277,6 @@ export default function App() {
       .finally(() => setLoadingPlaylists(false));
   }, []);
 
-  // ── Fetch YouTube playlists (Data API, requires sign-in) ─
   const loadYoutubePlaylists = useCallback((silent = false) => {
     setLoadingPlaylists(true);
     if (!silent) setSettingsError(null);
@@ -284,7 +286,6 @@ export default function App() {
       .finally(() => setLoadingPlaylists(false));
   }, []);
 
-  // ── Load a playlist from a YouTube URL (no sign-in) ─────
   const loadYoutubePlaylistFromUrl = useCallback(async (rawInput) => {
     setSettingsError(null);
     const parsed = parseYouTubePlaylistUrl(rawInput);
@@ -309,7 +310,6 @@ export default function App() {
     }
   }, []);
 
-  // ── Handle Spotify OAuth callback on mount ─────────────
   useEffect(() => {
     async function checkCallback() {
       const params = new URLSearchParams(window.location.search);
@@ -317,7 +317,6 @@ export default function App() {
         try {
           await handleCallback();
           setSpotifyConnected(true);
-          // Small delay to let token settle before fetching
           setTimeout(() => loadSpotifyPlaylists(true), 500);
         } catch (err) {
           setSettingsError(err.message);
@@ -331,7 +330,6 @@ export default function App() {
     checkCallback();
   }, []);
 
-  // ── Load a playlist by ID (works for all services) ────
   const loadPlaylist = useCallback(async (id, service) => {
     setLoadingPlaylist(true);
     setSettingsError(null);
@@ -408,15 +406,13 @@ export default function App() {
       window.removeEventListener('mouseup', onMouseUp);
     };
   }, [volumeDragging, setVolume]);
+
   const [needleChangeFrame, setNeedleChangeFrame] = useState(0);
-  // null sentinel = haven't seen any track yet; 'No track' = placeholder while
-  // tracks load async. Both should silently set the ref without animating.
   const prevTrackRef = useRef(null);
 
   const currentFrames = isPink ? assets.recordFramesA : assets.recordFramesB;
   const incomingFrames = isPink ? assets.recordFramesB : assets.recordFramesA;
 
-  // Spin animation while playing
   useEffect(() => {
     if (!isPlaying || swapping) return;
     const interval = setInterval(() => {
@@ -426,8 +422,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isPlaying, swapping, currentFrames.length]);
 
-  // Detect song change and trigger swap
-  // Sequence: needle lifts (0→1→2) → records swap → needle lowers (2→1→0)
   useEffect(() => {
     if (prevTrackRef.current === track.title) return;
     const wasInitialOrPlaceholder = prevTrackRef.current === null || prevTrackRef.current === 'No track';
@@ -439,20 +433,13 @@ export default function App() {
     setNeedleLifted(true);
     setNeedleChangeFrame(0);
 
-    // Show needle lifted (frame 1 = index 1)
     setTimeout(() => setNeedleChangeFrame(1), 200);
-
-    // Start record swap
     setTimeout(() => setSwapping(true), 400);
-
-    // Finish swap, switch color
     setTimeout(() => {
       setIsPink((p) => !p);
       setRecordFrame(0);
       setSwapping(false);
     }, 1000);
-
-    // Needle lower after swap is done, reset to frame 1
     setTimeout(() => {
       setNeedleChangeFrame(0);
       setNeedleLifted(false);
@@ -461,6 +448,9 @@ export default function App() {
 
   }, [track.title, needleLifted]);
 
+  const specialBackground = getSpecialSongBackground(track);
+  const showSpecialBackground = specialBgEnabled && specialBackground && isValidImageUrl(specialBackground.image);
+
   const resizeTL = useResize('top-left');
   const resizeTR = useResize('top-right');
   const resizeBL = useResize('bottom-left');
@@ -468,13 +458,16 @@ export default function App() {
 
   return (
     <div className={`player ${theme === 'blue' ? 'theme-blue' : ''}`}>
-      {/* Base frame */}
-      <img src={assets.frame} className="layer" alt="" draggable={false} />
+      {showSpecialBackground && (
+        <div
+          className="special-song-background visible"
+          style={{ backgroundImage: `url(${specialBackground.image})` }}
+        />
+      )}
 
-      {/* Window title */}
+      <img src={assets.frame} className="layer" alt="" draggable={false} />
       <div className="window-title">cupid player</div>
 
-      {/* Record player centered in frame */}
       <img src={assets.recordPlayer} className="record-player" alt="" draggable={false} />
       <img
         src={currentFrames[recordFrame]}
@@ -497,13 +490,9 @@ export default function App() {
         draggable={false}
       />
 
-      {/* Frame overlay (no background) to clip sliding records */}
       <img src={assets.frameNoBg} className="layer frame-overlay" alt="" draggable={false} />
-
-      {/* Decorative */}
       <img src={assets.plant} className="layer layer-ui" alt="" draggable={false} />
 
-      {/* Progress bar layers */}
       <img src={assets.progressBar} className="layer layer-ui" alt="" draggable={false} />
       <img
         src={progressBarStars}
@@ -524,12 +513,10 @@ export default function App() {
         }}
       />
 
-      {/* Playback control layers (visual only) */}
       <img src={assets.backwardsButton} className="layer layer-ui" alt="" draggable={false} />
       <img src={isPlaying ? assets.pauseButton : assets.playButton} className="layer layer-ui" alt="" draggable={false} />
       <img src={assets.forwardsButton} className="layer layer-ui" alt="" draggable={false} />
 
-      {/* Volume/mute button layer */}
       <img
         src={muted ? assets.muteButton : assets.volumeButton}
         className="layer layer-ui"
@@ -538,7 +525,6 @@ export default function App() {
         style={{ opacity: 0.8 }}
       />
 
-      {/* Shuffle/repeat button layer */}
       <img
         src={playMode === 'repeat' ? assets.repeatButton : assets.shuffleButton}
         className="layer layer-ui"
@@ -547,41 +533,31 @@ export default function App() {
         style={{ opacity: playMode === 'normal' ? 0.4 : 0.8 }}
       />
 
-      {/* Window control layers (visual only) */}
       <img src={assets.minimizerButton} className="layer layer-ui" alt="" draggable={false} />
       <img src={assets.windowButton} className="layer layer-ui" alt="" draggable={false} />
       <img src={assets.exitButton} className="layer layer-ui" alt="" draggable={false} />
 
-      {/* Settings button layer */}
       <img src={assets.settings} className="layer layer-ui settings-layer" alt="" draggable={false} />
 
-      {/* SVG clip-path for pixel-art album mask */}
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
           <clipPath id="album-mask" clipPathUnits="objectBoundingBox">
-            {/* 35x41 centered vertically */}
             <rect x="0.07317" y="0" width="0.85366" height="1" />
-            {/* 37x39 */}
             <rect x="0.04878" y="0.02439" width="0.90244" height="0.95122" />
-            {/* 39x37 */}
             <rect x="0.02439" y="0.04878" width="0.95122" height="0.90244" />
-            {/* 41x35 */}
             <rect x="0" y="0.07317" width="1" height="0.85366" />
           </clipPath>
         </defs>
       </svg>
 
-      {/* Album art clipped to pixel mask */}
       {track.art && (
         <div className="album-mask">
           <img src={track.art} className="album-art" alt="" draggable={false} />
         </div>
       )}
 
-      {/* Album frame overlay */}
       <img src={assets.albumFrame} className="layer album-frame-layer" alt="" draggable={false} />
 
-      {/* Now playing section */}
       <div className="now-playing">
         <div className="track-info">
           <div className="now-playing-label">
@@ -592,22 +568,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* Time display */}
       <div className="time-display">
         <span className="time-current">{formatTime(currentTime)}</span>
         <span className="time-remaining">{formatTime(duration - currentTime)}</span>
       </div>
 
-      {/* Drag region for moving the window */}
       <div className="drag-region" />
 
-      {/* Custom resize handles at frame corners */}
       <div className="resize-handle top-left" onMouseDown={resizeTL} />
       <div className="resize-handle top-right" onMouseDown={resizeTR} />
       <div className="resize-handle bottom-left" onMouseDown={resizeBL} />
       <div className="resize-handle bottom-right" onMouseDown={resizeBR} />
 
-      {/* Progress bar seek target */}
       <div
         className="progress-seek"
         ref={seekRef}
@@ -623,12 +595,10 @@ export default function App() {
         }}
       />
 
-      {/* Playback control click targets */}
       <div className="btn btn-prev" onClick={prev} />
       <div className="btn btn-play" onClick={togglePlay} />
       <div className="btn btn-next" onClick={next} />
 
-      {/* Volume bar layers — shown on hover or drag */}
       {(volumeHovered || volumeDragging) && (
         <>
           <img src={assets.volumeBarLow} className="layer layer-ui volume-bar-layer" alt="" draggable={false} />
@@ -644,7 +614,6 @@ export default function App() {
         </>
       )}
 
-      {/* Volume icon — hover to reveal bar */}
       <div
         className={`volume-hover-zone ${(volumeHovered || volumeDragging) ? 'expanded' : ''}`}
         onMouseLeave={() => { if (!volumeDragging) setVolumeHovered(false); }}
@@ -669,18 +638,14 @@ export default function App() {
         )}
       </div>
 
-      {/* Shuffle/repeat click target */}
       <div className="btn btn-playmode" onClick={cyclePlayMode} title={playMode} />
 
-      {/* Window control click targets */}
       <div className="btn btn-minimize" onClick={() => window.cupid?.minimize()} />
       <div className="btn btn-window" onClick={() => window.cupid?.maximize()} />
       <div className="btn btn-exit" onClick={() => window.cupid?.close()} />
 
-      {/* Settings button */}
       <div className="btn btn-settings" onClick={() => setShowSettings((v) => !v)} />
 
-      {/* Debug overlays — toggle with showDebug state */}
       {showDebug && (
         <>
           <div className="debug-overlay btn btn-prev" />
@@ -692,7 +657,12 @@ export default function App() {
         </>
       )}
 
-      {/* Settings panel */}
+      {showSpecialBackground && specialBackground?.message && (
+        <div className="special-song-message">
+          {specialBackground.message}
+        </div>
+      )}
+
       {showSettings && (
         <div className="settings-panel">
           <div className="settings-panel-inner">
@@ -711,6 +681,25 @@ export default function App() {
                 blue
               </button>
             </div>
+
+            <div className="settings-label">special backgrounds</div>
+            <div className="settings-theme-row">
+              <button
+                className={`settings-theme-btn ${specialBgEnabled ? 'active' : ''}`}
+                onClick={() => {
+                  const newState = !specialBgEnabled;
+                  setSpecialBgEnabled(newState);
+                  try {
+                    localStorage.setItem('cupid-special-song-bg-enabled', newState ? 'true' : 'false');
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                {specialBgEnabled ? 'on' : 'off'}
+              </button>
+            </div>
+
             <div className="settings-label">music</div>
             <SettingsDropdown
               value={musicService}
